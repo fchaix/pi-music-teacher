@@ -1,0 +1,52 @@
+{
+  "name": "pi-music-teacher",
+  "version": "0.1.0",
+  "description": "Use pi as a music teacher: LilyPond scores rendered inline in the chat and played as audio",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "extension",
+    "skill",
+    "music",
+    "music-teacher",
+    "lilypond",
+    "notation"
+  ],
+  "author": "fchaix",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fchaix/pi-music-teacher.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fchaix/pi-music-teacher/issues"
+  },
+  "homepage": "https://github.com/fchaix/pi-music-teacher#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "displayName": "Music Teacher",
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "files": [
+    "extensions",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "npm pack --dry-run"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}

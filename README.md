@@ -14,12 +14,24 @@ agent: [play_score → 🎵 audio through the speakers]
 
 | Piece | Role |
 |---|---|
-| `.pi/extensions/score-tools.ts` | pi extension exposing two tools: `render_score` (LilyPond `.ly` → PNG, displayed inline) and `play_score` (`.ly` → MIDI → fluidsynth → WAV → plays on the machine) |
-| `.pi/skills/music-teacher/SKILL.md` | teaching skill: templates, correction loop, note-name mapping — tells the agent *how* to teach and when to render |
+| `extensions/score-tools.ts` | pi extension exposing two tools: `render_score` (LilyPond `.ly` → PNG, displayed inline) and `play_score` (`.ly` → MIDI → fluidsynth → WAV → plays on the machine) |
+| `skills/music-teacher/SKILL.md` | teaching skill: templates, correction loop, note-name mapping — tells the agent *how* to teach and when to render |
 | `flake.nix` | Nix dev shell providing `lilypond`, `fluidsynth`, a SoundFont, and audio players |
-| `.pi/settings.json` | terminal image width for readable scores |
+| `.pi/settings.json` | terminal image width for readable scores + loads this repo as a package |
 
 Everything is plain text in, score + sound out — no proprietary format, no editor lock-in.
+
+## Install as a pi package
+
+This repo *is* a [pi package](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md) (`pi-package` keyword, `pi` manifest in `package.json`). Install it with pi:
+
+```bash
+pi install git:github.com/fchaix/pi-music-teacher   # from git
+pi install npm:pi-music-teacher                    # from npm (once published)
+pi install /path/to/pi-music-teacher               # local path
+```
+
+Publishing to npm requires Node/npm: `npm publish` (after `npm login`), or `npm pack` to inspect the tarball first. The package only ships `extensions/`, `skills/`, `README.md` and `LICENSE`.
 
 ## Requirements
 
@@ -32,7 +44,7 @@ Everything is plain text in, score + sound out — no proprietary format, no edi
 ```bash
 cd music-course
 nix develop          # brings lilypond, fluidsynth, soundfont, paplay
-pi                   # trust the project so .pi/ (extensions, skill, settings) loads
+pi                   # trust the project; .pi/settings.json loads this repo as a package
 ```
 
 Then in pi, ask anything musical. Examples:
