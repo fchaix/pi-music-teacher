@@ -90,6 +90,13 @@ export default function (pi: ExtensionAPI) {
       if (!/staff-size|set-global-staff-size/.test(source)) {
         source = source.replace(/(\\version[^\n]*\n)/, `$1#(set-global-staff-size 26)\n`);
       }
+      // One line per page: the whole piece fits a single wide strip (nothing truncated)
+      if (!/page-breaking|one-line/.test(source)) {
+        source = source.replace(
+          /(\\version[^\n]*\n)/,
+          `$1\\paper { page-breaking = #ly:one-line-auto-height-breaking }\n`,
+        );
+      }
       if (params.title && !source.includes("\\header")) {
         source = source.replace(/(\\version[^\n]*\n)/, `$1\\header { title = "${params.title}" }\n`);
       }
@@ -98,10 +105,9 @@ export default function (pi: ExtensionAPI) {
       const out = join(WORKDIR, "score");
       await writeFile(ly, source);
 
-      // -dpreview generates score.preview.png: tight crop of the 1st system, readable on screen
       const { code, stderr } = await run(
         "lilypond",
-        ["--png", "-dresolution=200", "-dpreview", "-o", out, ly],
+        ["--png", "-dresolution=200", "-o", out, ly],
         30000,
       );
 
@@ -120,17 +126,16 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      // Display: preview (1st system, cropped); fallback: full page.
-      const png = await readFile(join(WORKDIR, "score.preview.png")).catch(() =>
-        readFile(join(WORKDIR, "score.png")).catch(() => readFile(join(WORKDIR, "score-1.png"))),
+      // Display: whole piece on a single line; fallback: full page / first page.
+      const png = await readFile(join(WORKDIR, "score.png")).catch(() =>
+        readFile(join(WORKDIR, "score-1.png")),
       );
-      const hasMorePages = (await readFile(join(WORKDIR, "score-2.png")).catch(() => null)) !== null;
 
       return {
         content: [
           {
             type: "text",
-            text: `Score rendered (1st system)${hasMorePages ? " — the piece is longer than one page" : ""} — source: ${ly}`,
+            text: `Score rendered (whole piece) — source: ${ly}`,
           },
           { type: "image", data: png.toString("base64"), mimeType: "image/png" },
         ],

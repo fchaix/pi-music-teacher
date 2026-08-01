@@ -22,8 +22,8 @@ Teach music through interactive dialogue where every musical example, exercise, 
 
 ## Display
 
-- The render shows the **1st system, cropped** (full terminal width, readable).
-- An example **longer than one system** only shows the first one: split into several renders when the whole content must be seen.
+- The render shows the **whole piece on a single line** (`ly:one-line-auto-height-breaking`): nothing is truncated.
+- Short snippets (1–8 measures) stay crisp; longer pieces get scaled down — keep snippets short.
 - The last rendered source lives in `/tmp/pi-score/score.ly`.
 
 ## Audio (`play_score`)
