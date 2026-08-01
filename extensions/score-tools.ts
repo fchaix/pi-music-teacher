@@ -134,6 +134,50 @@ async function readFirstPng(out: string): Promise<Buffer | null> {
     .catch(() => null);
 }
 
+async function pngPages(out: string): Promise<Buffer[]> {
+  const pages: Buffer[] = [];
+  const first = await readFirstPng(out);
+  if (first) pages.push(first);
+  for (let i = 2; i <= 20; i++) {
+    const p = await readFile(`${out}-${i}.png`).catch(() => null);
+    if (p) pages.push(p);
+    else break;
+  }
+  return pages;
+}
+
+// PNG width is stored big-endian at bytes 16-20 (IHDR).
+function pngWidth(buf: Buffer): number {
+  return buf.readUInt32BE(16);
+}
+
+const ONE_LINE_MAX_WIDTH = 12000; // px at 200dpi; beyond that a strip is unreadable
+
+// Short pieces: one wide strip (whole piece). Long pieces: default page
+// breaking, one image per page — both readable in the terminal.
+async function renderAuto(
+  lyPath: string,
+  out: string,
+): Promise<{ images: Buffer[]; mode: "strip" | "pages"; code: number; stderr: string }> {
+  let { code, stderr } = await compileToPng(out);
+  if (code !== 0) return { images: [], mode: "strip", code, stderr };
+
+  let images = await pngPages(out);
+  if (images.length && pngWidth(images[0]) > ONE_LINE_MAX_WIDTH) {
+    const src = await readFile(lyPath, "utf8").catch(() => "");
+    const srcPages = src.replace(
+      /\\paper\s*\{[^}]*one-line-auto-height-breaking[^}]*\}/,
+      "\\paper { page-breaking = #ly:default-breaking }",
+    );
+    const outPages = out + "-pages";
+    await writeFile(outPages + ".ly", srcPages);
+    const r2 = await compileToPng(outPages);
+    if (r2.code === 0) images = await pngPages(outPages);
+    return { images, mode: "pages", code: r2.code, stderr: r2.stderr };
+  }
+  return { images, mode: "strip", code, stderr };
+}
+
 function stripFences(s: string): string {
   return s.replace(/```[^\n]*\n?/g, "").replace(/```/g, "").trim();
 }
@@ -203,7 +247,7 @@ export default function (pi: ExtensionAPI) {
       const out = join(WORKDIR, "score");
       await writeFile(ly, source);
 
-      const { code, stderr } = await compileToPng(out);
+      const { code, stderr, images, mode } = await renderAuto(ly, out);
 
       if (code !== 0) {
         const missing = code === 127 && stderr.includes("ENOENT");
@@ -220,24 +264,23 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      // Display: whole piece on a single line; fallback: full page / first page.
-      const png = await readFirstPng(out);
-      if (!png) {
+      if (!images.length) {
         return {
           content: [{ type: "text", text: "Compilation OK but no PNG image was produced." }],
           details: { ok: false, ly },
         };
       }
 
+      const label = mode === "strip" ? "whole piece" : `${images.length} pages`;
       return {
         content: [
           {
             type: "text",
-            text: `Score rendered (whole piece) — source: ${ly}`,
+            text: `Score rendered (${label}) — source: ${ly}`,
           },
-          { type: "image", data: png.toString("base64"), mimeType: "image/png" },
+          ...images.map((png) => ({ type: "image" as const, data: png.toString("base64"), mimeType: "image/png" })),
         ],
-        details: { ok: true, ly },
+        details: { ok: true, ly, pages: images.length },
       };
     },
   });
@@ -377,13 +420,13 @@ export default function (pi: ExtensionAPI) {
       }
 
       const out = join(WORKDIR, "fetched");
-      let { code, stderr } = await compileToPng(out);
+      let { code, stderr, images, mode } = await renderAuto(ly, out);
       if (code !== 0) {
         // Last resort: ask a headless pi sub-agent to fix the file.
         const fixed = await fixWithSubAgent(text, stderr);
         if (fixed) {
           await writeFile(ly, fixed);
-          ({ code, stderr } = await compileToPng(out));
+          ({ code, stderr, images, mode } = await renderAuto(ly, out));
         }
       }
       if (code !== 0) {
@@ -398,20 +441,20 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      const png = await readFirstPng(out);
-      if (!png) {
+      if (!images.length) {
         return {
           content: [{ type: "text", text: `Compilation OK but no PNG image was produced.\n${attribution}` }],
           details: { ok: false, ly, license: license.reason },
         };
       }
 
+      const label = mode === "strip" ? "whole piece on one line" : `${images.length} pages`;
       return {
         content: [
-          { type: "text", text: `${attribution}\n✅ Rendered — license compatible.` },
-          { type: "image", data: png.toString("base64"), mimeType: "image/png" },
+          { type: "text", text: `${attribution}\n✅ Rendered (${label}) — license compatible.` },
+          ...images.map((png) => ({ type: "image" as const, data: png.toString("base64"), mimeType: "image/png" })),
         ],
-        details: { ok: true, ly, license: license.reason, title: header["title"] },
+        details: { ok: true, ly, license: license.reason, title: header["title"], pages: images.length },
       };
     },
   });
