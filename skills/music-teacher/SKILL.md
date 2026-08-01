@@ -22,8 +22,8 @@ Teach music through interactive dialogue where every musical example, exercise, 
 
 ## Affichage
 
-- Le rendu montre le **1er système recadré** (pleine largeur du terminal, lisible).
-- Un exemple de **plus d'un système** n'affiche que le premier : découper en plusieurs rendus si le contenu doit être vu en entier.
+- Le rendu montre **toute la pièce sur une seule ligne** (`ly:one-line-auto-height-breaking`) : rien n'est tronqué.
+- Les snippets courts (1–8 mesures) restent nets ; les pièces plus longues sont réduites — garder des snippets courts.
 - La source du dernier rendu est dans `/tmp/pi-score/score.ly`.
 
 ## Audio (`play_score`)
