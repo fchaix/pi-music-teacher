@@ -41,6 +41,14 @@ Teach music through interactive dialogue where every musical example, exercise, 
 - Noms courants : `violin`, `viola`, `cello`, `contrabass`, `flute`, `recorder`, `oboe`, `clarinet`, `trumpet`, `trombone`, `french horn`, `acoustic guitar (nylon)`, `electric guitar (clean)`, `church organ`, `harpsichord`, `accordion`, `pan flute`, `sitar`, `steel drums`…
 - Plusieurs instruments : un `\new Staff` par instrument, chacun avec son `\set Staff.midiInstrument`.
 
+## Répertoire (`fetch_score`)
+
+- Récupère des partitions libres du **Mutopia Project** (~2100 pièces domaine public/CC) et les rend inline.
+- **Politique de licence** : seules les pièces PD/CC0/CC-BY/CC-BY-SA sont rendues ; les licences NC et ND sont refusées (l'outil convertit et re-grave la musique).
+- **Attribution** (compositeur, graveur, licence, source) toujours affichée.
+- Les vieux fichiers sont mis à jour automatiquement avec `convert-ly` ; si ça ne suffit pas, un sous-agent pi headless est sollicité pour corriger le fichier.
+- Usage : répertoire réel dans les cours (Bach, Mozart…), déchiffrage, oreille sur de la vraie musique.
+
 ## Always pass a COMPLETE `.ly` file to `render_score`
 
 Never a bare fragment. Template minimal:
