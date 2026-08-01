@@ -1,5 +1,8 @@
 {
   "terminal": {
     "imageWidthCells": 120
-  }
+  },
+  "packages": [
+    ".."
+  ]
 }
