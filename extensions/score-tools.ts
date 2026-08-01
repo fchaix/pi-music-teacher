@@ -167,7 +167,7 @@ async function renderAuto(
     const src = await readFile(lyPath, "utf8").catch(() => "");
     const srcPages = src.replace(
       /\\paper\s*\{[^}]*one-line-auto-height-breaking[^}]*\}/,
-      "\\paper { page-breaking = #ly:default-breaking }",
+      "",
     );
     const outPages = out + "-pages";
     await writeFile(outPages + ".ly", srcPages);
