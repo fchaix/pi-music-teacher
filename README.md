@@ -67,4 +67,4 @@ falling back to `aplay` (ALSA). Audio plays on the machine the agent runs on.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GPL-3.0 (strong copyleft) — see [LICENSE](LICENSE).
