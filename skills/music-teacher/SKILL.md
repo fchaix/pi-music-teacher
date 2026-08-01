@@ -34,6 +34,13 @@ Teach music through interactive dialogue where every musical example, exercise, 
 - Idéal pour : écouter un exercice avant de le jouer, comparer deux versions, vérifier son oreille.
 - Renvoie le code d'erreur lisible du compilateur si le `.ly` est invalide : corriger et réessayer.
 
+## Instruments (`\set Staff.midiInstrument`)
+
+- Une ligne dans le `.ly` avant la musique : `\set Staff.midiInstrument = "flute"`.
+- Par défaut c'est du piano (programme GM 0) ; la SoundFont FluidR3 couvre les **128 instruments General MIDI**.
+- Noms courants : `violin`, `viola`, `cello`, `contrabass`, `flute`, `recorder`, `oboe`, `clarinet`, `trumpet`, `trombone`, `french horn`, `acoustic guitar (nylon)`, `electric guitar (clean)`, `church organ`, `harpsichord`, `accordion`, `pan flute`, `sitar`, `steel drums`…
+- Plusieurs instruments : un `\new Staff` par instrument, chacun avec son `\set Staff.midiInstrument`.
+
 ## Always pass a COMPLETE `.ly` file to `render_score`
 
 Never a bare fragment. Template minimal:
