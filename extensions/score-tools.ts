@@ -128,18 +128,15 @@ async function compileToPng(out: string): Promise<{ code: number; stderr: string
   return run("lilypond", ["--png", "-dresolution=200", "-o", out, out + ".ly"], 60000);
 }
 
-async function readFirstPng(out: string): Promise<Buffer | null> {
-  return readFile(out + ".png")
-    .catch(() => readFile(out + "-1.png"))
-    .catch(() => null);
-}
-
 async function pngPages(out: string): Promise<Buffer[]> {
   const pages: Buffer[] = [];
-  const first = await readFirstPng(out);
+  // lilypond 2.26 names: out.png (single page) or out-page1.png, out-page2.png…
+  const first = await readFile(out + ".png")
+    .catch(() => readFile(out + "-page1.png"))
+    .catch(() => null);
   if (first) pages.push(first);
   for (let i = 2; i <= 20; i++) {
-    const p = await readFile(`${out}-${i}.png`).catch(() => null);
+    const p = await readFile(`${out}-page${i}.png`).catch(() => null);
     if (p) pages.push(p);
     else break;
   }
