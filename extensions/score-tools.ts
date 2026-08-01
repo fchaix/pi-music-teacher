@@ -156,11 +156,12 @@ function mapInstrument(mutopiaInstrument: string | undefined): string | null {
 }
 
 // Set the MIDI instrument inside the \midi block without touching the music.
+// Note: in \midi \context blocks, properties are bare assignments (no backslash).
 function withMidiInstrument(text: string, inst: string): string {
   if (!/\\midi\s*\{/.test(text)) return text;
   return text.replace(/\\midi\s*\{[^}]*\}/, (m) => {
     const inner = m.slice(m.indexOf("{") + 1, m.lastIndexOf("}"));
-    return `\\midi { ${inner} \\context { \\Staff \\midiInstrument = "${inst}" } }`;
+    return `\\midi { ${inner} \\context { \\Staff midiInstrument = "${inst}" } }`;
   });
 }
 
