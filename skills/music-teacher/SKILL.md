@@ -41,6 +41,14 @@ Teach music through interactive dialogue where every musical example, exercise, 
 - Common names: `violin`, `viola`, `cello`, `contrabass`, `flute`, `recorder`, `oboe`, `clarinet`, `trumpet`, `trombone`, `french horn`, `acoustic guitar (nylon)`, `electric guitar (clean)`, `church organ`, `harpsichord`, `accordion`, `pan flute`, `sitar`, `steel drums`…
 - Multiple instruments: one `\new Staff` per instrument, each with its own `\set Staff.midiInstrument`.
 
+## Repertoire (`fetch_score`)
+
+- Fetches free sheet music from the **Mutopia Project** (~2100 public-domain/CC pieces) and renders it inline.
+- **License policy**: only PD/CC0/CC-BY/CC-BY-SA pieces are rendered; NC and ND licenses are refused (the tool converts and re-typesets the music).
+- **Attribution** (composer, typesetter, license, source) is always shown.
+- Old files are upgraded automatically with `convert-ly`; if that still fails, a headless pi sub-agent is asked to fix the file.
+- Use it for: real repertoire in lessons (Bach, Mozart…), sight-reading, ear-training on real music.
+
 ## Always pass a COMPLETE `.ly` file to `render_score`
 
 Never a bare fragment. Minimal template:

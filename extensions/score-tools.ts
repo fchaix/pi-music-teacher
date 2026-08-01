@@ -68,6 +68,77 @@ async function findSoundFont(): Promise<string | null> {
   return stdout.split("\n").find((l) => l.trim()) ?? null;
 }
 
+const MUTOPIA_BASE = "https://raw.githubusercontent.com/MutopiaProject/MutopiaProject/master/ftp/";
+
+function parseHeader(ly: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const h = ly.match(/\\header\s*{([\s\S]*?)}/);
+  if (!h) return out;
+  for (const m of h[1].matchAll(/([a-zA-Z]+)\s*=\s*"((?:[^"\\]|\\.)*)"/g)) {
+    out[m[1]] = m[2];
+  }
+  return out;
+}
+
+// Licence policy: only reuse works we are allowed to modify, perform and
+// redistribute (the tool converts and re-typesets them).
+function checkLicense(copyright: string | undefined): { ok: boolean; reason: string } {
+  const s = (copyright ?? "").toLowerCase();
+  if (!s) return { ok: false, reason: "No license field in the header" };
+  if (/all rights reserved/.test(s)) return { ok: false, reason: `All rights reserved: ${copyright}` };
+  if (/\bnc\b|non-?commercial/.test(s)) return { ok: false, reason: `Non-commercial (NC) license not reusable here: ${copyright}` };
+  if (/\bnd\b|no-?derivative/.test(s)) return { ok: false, reason: `No-derivatives (ND) license not reusable here: ${copyright}` };
+  if (/public domain|cc0|creative commons|attribution|gpl/.test(s)) return { ok: true, reason: copyright! };
+  return { ok: false, reason: `Unknown license: ${copyright}` };
+}
+
+function versionOf(ly: string): [number, number] {
+  const m = ly.match(/\\version\s+"(\d+)\.(\d+)/);
+  return m ? [parseInt(m[1]), parseInt(m[2])] : [0, 0];
+}
+
+async function compileToPng(out: string): Promise<{ code: number; stderr: string }> {
+  return run("lilypond", ["--png", "-dresolution=200", "-o", out, out + ".ly"], 60000);
+}
+
+async function readFirstPng(out: string): Promise<Buffer | null> {
+  return readFile(out + ".png")
+    .catch(() => readFile(out + "-1.png"))
+    .catch(() => null);
+}
+
+function stripFences(s: string): string {
+  return s.replace(/```[^\n]*\n?/g, "").replace(/```/g, "").trim();
+}
+
+// Last-resort fallback: hand the broken .ly to a headless pi sub-agent.
+async function fixWithSubAgent(source: string, errors: string): Promise<string | null> {
+  const prompt =
+    "You are fixing a LilyPond (.ly) file that fails to compile with lilypond 2.26.\n" +
+    "Fix ALL syntax errors and return ONLY the complete corrected .ly file content, " +
+    "no explanations, no markdown fences.\n\n" +
+    "--- FILE ---\n" +
+    source +
+    "\n--- COMPILER ERRORS ---\n" +
+    errors;
+  const res = await run("pi", ["--mode", "json", "--no-session", "-p", prompt], 180000);
+  if (res.code !== 0) return null;
+  const last = res.stdout
+    .split("\n")
+    .filter((l) => l.includes('"type":"message_end"'))
+    .pop();
+  if (!last) return null;
+  try {
+    const ev = JSON.parse(last);
+    const content = ev?.message?.content;
+    if (typeof content === "string") return stripFences(content);
+    if (Array.isArray(content)) return stripFences(content.map((b: any) => b?.text ?? "").join("\n"));
+  } catch {
+    /* not JSON */
+  }
+  return null;
+}
+
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "render_score",
@@ -105,11 +176,7 @@ export default function (pi: ExtensionAPI) {
       const out = join(WORKDIR, "score");
       await writeFile(ly, source);
 
-      const { code, stderr } = await run(
-        "lilypond",
-        ["--png", "-dresolution=200", "-o", out, ly],
-        30000,
-      );
+      const { code, stderr } = await compileToPng(out);
 
       if (code !== 0) {
         const missing = code === 127 && stderr.includes("ENOENT");
@@ -127,9 +194,13 @@ export default function (pi: ExtensionAPI) {
       }
 
       // Display: whole piece on a single line; fallback: full page / first page.
-      const png = await readFile(join(WORKDIR, "score.png")).catch(() =>
-        readFile(join(WORKDIR, "score-1.png")),
-      );
+      const png = await readFirstPng(out);
+      if (!png) {
+        return {
+          content: [{ type: "text", text: "Compilation OK but no PNG image was produced." }],
+          details: { ok: false, ly },
+        };
+      }
 
       return {
         content: [
@@ -205,6 +276,126 @@ export default function (pi: ExtensionAPI) {
       return {
         content: [{ type: "text", text: `🎵 Audio playing in the background (fluidsynth → ${player}) — source: ${ly}` }],
         details: { ok: true, ly },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "fetch_score",
+    label: "Fetch and render a score from Mutopia",
+    description:
+      "Downloads a LilyPond score from the Mutopia Project (free, public-domain/CC sheet music), " +
+      "checks the piece's license, converts it to a current LilyPond version if needed, and renders it inline. " +
+      "Only license-compatible pieces are rendered (PD/CC0/CC-BY/CC-BY-SA; NC and ND are refused). " +
+      "Attribution (composer + typesetter + license) is always shown.",
+    parameters: Type.Object({
+      source: Type.String({
+        description:
+          "Mutopia piece path (e.g. 'BachJS/BWV1001/bwv-1001_1') or any direct URL to a .ly file",
+      }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      await mkdir(WORKDIR, { recursive: true });
+
+      const url = /^https?:\/\//.test(params.source)
+        ? params.source
+        : MUTOPIA_BASE + params.source.replace(/^\//, "");
+
+      let text: string;
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          return {
+            content: [{ type: "text", text: `HTTP ${resp.status} while fetching ${url}` }],
+            details: { ok: false },
+          };
+        }
+        text = await resp.text();
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Fetch failed: ${String(e)}` }],
+          details: { ok: false },
+        };
+      }
+
+      const ly = join(WORKDIR, "fetched.ly");
+      await writeFile(ly, text);
+
+      const header = parseHeader(text);
+      const license = checkLicense(header["copyright"]);
+      const attribution =
+        `Piece: ${header["title"] ?? "?"} — ${header["composer"] ?? "?"}\n` +
+        `Typeset by: ${header["maintainer"] ?? "?"}\n` +
+        `License: ${header["copyright"] ?? "?"}\n` +
+        `Source: ${url}`;
+
+      if (!license.ok) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `🚫 Not rendered — license not reusable in this tool.\n${attribution}\nReason: ${license.reason}`,
+            },
+          ],
+          details: { ok: false, ly, license: license.reason },
+        };
+      }
+
+      // Convert old \version syntax to the current LilyPond, if needed.
+      const current = [2, 26];
+      if (versionOf(text)[0] < current[0] || (versionOf(text)[0] === current[0] && versionOf(text)[1] < current[1])) {
+        const conv = await run("convert-ly", ["-e", ly], 30000);
+        if (conv.code !== 0) {
+          return {
+            content: [{ type: "text", text: `convert-ly failed.\n${conv.stderr}` }],
+            details: { ok: false, ly },
+          };
+        }
+        text = await readFile(ly, "utf8");
+      }
+
+      // One line per page: whole piece on a single strip (unless the source sets its own).
+      if (!/page-breaking|one-line/.test(text)) {
+        await writeFile(ly, text.replace(/(\\version[^\n]*\n)/, `$1\\paper { page-breaking = #ly:one-line-auto-height-breaking }\n`));
+      }
+
+      const out = join(WORKDIR, "fetched");
+      let { code, stderr } = await compileToPng(out);
+      if (code !== 0) {
+        // Last resort: ask a headless pi sub-agent to fix the file.
+        const fixed = await fixWithSubAgent(text, stderr);
+        if (fixed) {
+          await writeFile(ly, fixed);
+          ({ code, stderr } = await compileToPng(out));
+        }
+      }
+      if (code !== 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Compilation failed (code ${code}) — the piece may need manual conversion.\n${attribution}\n${stderr}`,
+            },
+          ],
+          details: { ok: false, ly, license: license.reason },
+        };
+      }
+
+      const png = await readFirstPng(out);
+      if (!png) {
+        return {
+          content: [{ type: "text", text: `Compilation OK but no PNG image was produced.\n${attribution}` }],
+          details: { ok: false, ly, license: license.reason },
+        };
+      }
+
+      return {
+        content: [
+          { type: "text", text: `${attribution}\n✅ Rendered — license compatible.` },
+          { type: "image", data: png.toString("base64"), mimeType: "image/png" },
+        ],
+        details: { ok: true, ly, license: license.reason, title: header["title"] },
       };
     },
   });

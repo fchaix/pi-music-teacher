@@ -65,6 +65,12 @@ than one page report that only the first page is shown. `\version` and `\header`
 are added automatically when missing, and `#(set-global-staff-size 26)` enlarges
 the staves for on-screen reading unless the source sets its own.
 
+### `fetch_score`
+Takes a Mutopia piece path (e.g. `BachJS/BWV1001/bwv-1001_1`) or any `.ly` URL, downloads it,
+checks the license (only PD/CC0/CC-BY/CC-BY-SA are rendered; NC/ND refused), converts old `\version`
+syntax with `convert-ly` (headless `pi` sub-agent as last resort), and renders the whole piece
+inline with full attribution (composer, typesetter, license, source).
+
 ### `play_score`
 Takes the same `.ly` source, adds a `\midi` block automatically when missing,
 compiles to MIDI, renders a WAV with fluidsynth (FluidR3 SoundFont found via
