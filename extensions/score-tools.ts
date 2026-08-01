@@ -331,13 +331,21 @@ export default function (pi: ExtensionAPI) {
       "The same .ly as render_score works: a \\midi block is added automatically when missing. " +
       "Sound comes out of the machine's speakers. Returns a readable error on failure.",
     parameters: Type.Object({
-      source: Type.String({ description: "Full content of a LilyPond (.ly) file" }),
+      source: Type.Optional(Type.String({ description: "Full content of a LilyPond (.ly) file" })),
+      file: Type.Optional(Type.String({ description: "Path to an existing .ly file (overrides source)" })),
       title: Type.Optional(Type.String({ description: "Title (optional)" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       await mkdir(WORKDIR, { recursive: true });
 
-      const source = ensureMidi(prepSource(params.source, params.title));
+      const src = params.file ? await readFile(params.file, "utf8") : (params.source ?? "");
+      if (!src.trim()) {
+        return {
+          content: [{ type: "text", text: "No source: pass either `source` (.ly content) or `file` (path to a .ly)." }],
+          details: { ok: false },
+        };
+      }
+      const source = ensureMidi(prepSource(src, params.title));
       const ly = join(WORKDIR, "audio.ly");
       const out = join(WORKDIR, "audio");
       await writeFile(ly, source);
