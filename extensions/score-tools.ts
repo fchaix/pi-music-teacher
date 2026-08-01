@@ -124,6 +124,46 @@ function versionOf(ly: string): [number, number] {
   return m ? [parseInt(m[1]), parseInt(m[2])] : [0, 0];
 }
 
+// Mutopia declares the instrument in \header.mutopiainstrument (German names).
+const INSTRUMENT_KEYWORDS: [RegExp, string][] = [
+  [/violine|violin/, "violin"],
+  [/violoncello|\bcello\b/, "cello"],
+  [/\bviola\b/, "viola"],
+  [/kontrabass|contrabass|double ?bass/, "contrabass"],
+  [/blockfl[oö]te|recorder/, "recorder"],
+  [/fl[oö]te|flute/, "flute"],
+  [/oboe/, "oboe"],
+  [/klarinette|clarinet/, "clarinet"],
+  [/fagott|bassoon/, "bassoon"],
+  [/horn/, "french horn"],
+  [/trompete|trumpet/, "trumpet"],
+  [/posaune|trombone/, "trombone"],
+  [/tuba/, "tuba"],
+  [/gitarre|guitar/, "acoustic guitar (nylon)"],
+  [/harfe|harp/, "orchestral harp"],
+  [/orgel|organ/, "church organ"],
+  [/saxophon|saxophone/, "alto sax"],
+  [/klavier|piano/, "acoustic grand"],
+];
+
+function mapInstrument(mutopiaInstrument: string | undefined): string | null {
+  if (!mutopiaInstrument) return null;
+  const s = mutopiaInstrument.toLowerCase();
+  for (const [re, name] of INSTRUMENT_KEYWORDS) {
+    if (re.test(s)) return name;
+  }
+  return null;
+}
+
+// Set the MIDI instrument inside the \midi block without touching the music.
+function withMidiInstrument(text: string, inst: string): string {
+  if (!/\\midi\s*\{/.test(text)) return text;
+  return text.replace(/\\midi\s*\{[^}]*\}/, (m) => {
+    const inner = m.slice(m.indexOf("{") + 1, m.lastIndexOf("}"));
+    return `\\midi { ${inner} \\context { \\Staff \\midiInstrument = "${inst}" } }`;
+  });
+}
+
 async function compileToPng(out: string): Promise<{ code: number; stderr: string }> {
   return run("lilypond", ["--png", "-dresolution=200", "-o", out, out + ".ly"], 60000);
 }
@@ -379,10 +419,12 @@ export default function (pi: ExtensionAPI) {
 
       const header = parseHeader(text);
       const license = checkLicense(header["copyright"]);
+      const inst = mapInstrument(header["mutopiainstrument"]);
       const attribution =
         `Piece: ${header["title"] ?? "?"} — ${header["composer"] ?? "?"}\n` +
         `Typeset by: ${header["maintainer"] ?? "?"}\n` +
         `License: ${header["copyright"] ?? "?"}\n` +
+        `Instrument: ${header["mutopiainstrument"] ?? "?"} → ${inst ?? "piano (default)"}\n` +
         `Source: ${url}`;
 
       if (!license.ok) {
@@ -410,6 +452,9 @@ export default function (pi: ExtensionAPI) {
         }
         text = await readFile(ly, "utf8");
       }
+
+      // Map the declared instrument to MIDI (piano default otherwise).
+      if (inst) text = withMidiInstrument(text, inst);
 
       // One line per page: whole piece on a single strip (unless the source sets its own).
       if (!/page-breaking|one-line/.test(text)) {
