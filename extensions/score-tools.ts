@@ -69,6 +69,33 @@ async function findSoundFont(): Promise<string | null> {
 }
 
 const MUTOPIA_BASE = "https://raw.githubusercontent.com/MutopiaProject/MutopiaProject/master/ftp/";
+const MUTOPIA_API = "https://api.github.com/repos/MutopiaProject/MutopiaProject/contents/ftp/";
+
+// Resolve a Mutopia piece path (or direct .ly URL) to its .ly content.
+async function resolveLy(source: string): Promise<{ url: string; text: string } | { error: string }> {
+  if (/^https?:\/\//.test(source)) {
+    const resp = await fetch(source);
+    if (!resp.ok) return { error: `HTTP ${resp.status} while fetching ${source}` };
+    return { url: source, text: await resp.text() };
+  }
+  const path = source.replace(/^\//, "");
+  // Try the raw file directly (works when the path already ends in .ly).
+  let resp = await fetch(MUTOPIA_BASE + path);
+  if (resp.ok) return { url: MUTOPIA_BASE + path, text: await resp.text() };
+  // Otherwise it's a piece directory: list it via the GitHub API and pick the .ly file.
+  const apiResp = await fetch(MUTOPIA_API + path, { headers: { "User-Agent": "pi-music-teacher" } });
+  if (!apiResp.ok) {
+    return { error: `HTTP ${apiResp.status} — neither file nor directory found at ${path}` };
+  }
+  const entries = (await apiResp.json()) as { name: string; download_url: string | null }[];
+  const ly = entries.find((e) => e.name.endsWith(".ly"));
+  if (!ly?.download_url) {
+    return { error: `No .ly file in ${path} (found: ${entries.map((e) => e.name).join(", ")})` };
+  }
+  resp = await fetch(ly.download_url);
+  if (!resp.ok) return { error: `HTTP ${resp.status} while fetching ${ly.download_url}` };
+  return { url: ly.download_url, text: await resp.text() };
+}
 
 function parseHeader(ly: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -297,26 +324,15 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       await mkdir(WORKDIR, { recursive: true });
 
-      const url = /^https?:\/\//.test(params.source)
-        ? params.source
-        : MUTOPIA_BASE + params.source.replace(/^\//, "");
-
-      let text: string;
-      try {
-        const resp = await fetch(url);
-        if (!resp.ok) {
-          return {
-            content: [{ type: "text", text: `HTTP ${resp.status} while fetching ${url}` }],
-            details: { ok: false },
-          };
-        }
-        text = await resp.text();
-      } catch (e) {
+      const resolved = await resolveLy(params.source);
+      if ("error" in resolved) {
         return {
-          content: [{ type: "text", text: `Fetch failed: ${String(e)}` }],
+          content: [{ type: "text", text: resolved.error }],
           details: { ok: false },
         };
       }
+      let text = resolved.text;
+      const url = resolved.url;
 
       const ly = join(WORKDIR, "fetched.ly");
       await writeFile(ly, text);
